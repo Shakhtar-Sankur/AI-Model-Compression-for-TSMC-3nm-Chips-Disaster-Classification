@@ -20,7 +20,7 @@ class TSMCPerformanceSimulator:
         self.base_latency = 2.5
         self.base_power = 0.8
         self.memory_bandwidth = 1024
-        
+
     def estimate_performance(self, model: nn.Module, input_shape: Tuple = (1, 3, 224, 224)) -> Dict[str, float]:
         total_params = sum(p.numel() for p in model.parameters())
         flops = self._estimate_flops(model, input_shape)
@@ -36,7 +36,7 @@ class TSMCPerformanceSimulator:
             'parameters': total_params,
             'meets_targets': latency_ms < 100 and power_w < 5.0
         }
-    
+
     def _estimate_flops(self, model: nn.Module, input_shape: Tuple) -> float:
         total_flops = 0
         def hook(module, input, output):
@@ -69,8 +69,8 @@ class KnowledgeDistillationTrainer:
         for param in self.teacher.parameters():
             param.requires_grad = False
         self.teacher.eval()
-    
-    def distillation_loss(self, student_outputs, teacher_outputs, labels, 
+
+    def distillation_loss(self, student_outputs, teacher_outputs, labels,
                          temperature: float = 3.0, alpha: float = 0.7):
         soft_targets = F.softmax(teacher_outputs / temperature, dim=1)
         soft_prob = F.log_softmax(student_outputs / temperature, dim=1)
@@ -97,11 +97,11 @@ class TrainingPipeline:
             'power_w': []
         }
         self.writer = SummaryWriter(log_dir=str(self.output_dir / "tensorboard"))
-        
+
     def setup_models_and_data(self, num_classes: int = 4, batch_size: int = 32) -> Dict:
         self.student_model, self.teacher_model = self.compressor.create_models(num_classes)
         self.dataloaders = self.dataset_manager.create_dataloaders(
-            batch_size=batch_size, 
+            batch_size=batch_size,
             num_workers=2
         )
         self.kd_trainer = KnowledgeDistillationTrainer(
@@ -113,7 +113,7 @@ class TrainingPipeline:
             'train_samples': len(self.dataloaders['train'].dataset),
             'val_samples': len(self.dataloaders['val'].dataset)
         }
-    
+
     def train_teacher_model(self, epochs: int = 10, lr: float = 0.001) -> Dict[str, float]:
         optimizer = optim.Adam(self.teacher_model.parameters(), lr=lr, weight_decay=1e-4)
         scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
@@ -152,11 +152,11 @@ class TrainingPipeline:
             val_acc = 100. * val_correct / val_total
             if val_acc > best_acc:
                 best_acc = val_acc
-                torch.save(self.teacher_model.state_dict(), 
+                torch.save(self.teacher_model.state_dict(),
                           self.output_dir / 'best_teacher_model.pth')
             scheduler.step()
         return {'best_accuracy': best_acc, 'final_accuracy': val_acc}
-    
+
     def train_student_with_distillation(self, epochs: int = 20, lr: float = 0.001,
                                        temperature: float = 3.0, alpha: float = 0.7) -> Dict:
         optimizer = optim.Adam(self.student_model.parameters(), lr=lr, weight_decay=1e-4)
@@ -167,8 +167,11 @@ class TrainingPipeline:
             if epoch > 5:
                 current_sparsity = compression_schedule[epoch]
                 if current_sparsity > 0.1:
+                    # keep the reparametrisation so the zeros survive the
+                    # optimiser steps that follow; baked in after the last epoch
                     self.student_model = self.compressor.magnitude_pruning(
-                        self.student_model, sparsity=current_sparsity
+                        self.student_model, sparsity=current_sparsity,
+                        permanent=(epoch == epochs - 1)
                     )
             self.student_model.train()
             train_loss = 0.0
@@ -225,7 +228,7 @@ class TrainingPipeline:
             'final_performance': perf_metrics,
             'compression_achieved': compression_schedule[-1]
         }
-    
+
     def validate_model(self, model: nn.Module) -> Dict[str, float]:
         model.eval()
         val_loss = 0.0
@@ -246,13 +249,13 @@ class TrainingPipeline:
             'accuracy': 100. * val_correct / val_total,
             'total_samples': val_total
         }
-    
+
     def complete_optimization_pipeline(self) -> Dict:
         setup_info = self.setup_models_and_data()
         teacher_results = self.train_teacher_model(epochs=10)
         student_results = self.train_student_with_distillation(epochs=20)
         compression_results = self.compressor.compress_pipeline(
-            self.student_model, 
+            self.student_model,
             save_path=str(self.output_dir / "models")
         )
         final_performance = self.compressor.simulate_tsmc_3nm_performance(
@@ -272,7 +275,7 @@ class TrainingPipeline:
         self.save_results(final_results)
         self.plot_training_curves()
         return final_results
-    
+
     def save_results(self, results: Dict):
         results_file = self.output_dir / "training_results.json"
         json_results = {}
@@ -280,13 +283,13 @@ class TrainingPipeline:
             if isinstance(value, np.ndarray):
                 json_results[key] = value.tolist()
             elif isinstance(value, dict):
-                json_results[key] = {k: v.tolist() if isinstance(v, np.ndarray) else v 
+                json_results[key] = {k: v.tolist() if isinstance(v, np.ndarray) else v
                                    for k, v in value.items()}
             else:
                 json_results[key] = value
         with open(results_file, 'w') as f:
             json.dump(json_results, f, indent=2)
-    
+
     def plot_training_curves(self):
         fig, axes = plt.subplots(2, 3, figsize=(18, 12))
         fig.suptitle('TSMC 3nm AI Accelerator Training Results', fontsize=16)
@@ -324,8 +327,8 @@ class TrainingPipeline:
         axes[1, 1].set_ylabel('Power (W)')
         axes[1, 1].legend()
         axes[1, 1].grid(True)
-        axes[1, 2].scatter(self.training_history['latency_ms'], 
-                          self.training_history['val_acc'], 
+        axes[1, 2].scatter(self.training_history['latency_ms'],
+                          self.training_history['val_acc'],
                           c=epochs, cmap='viridis', s=50)
         axes[1, 2].set_title('Accuracy vs Latency')
         axes[1, 2].set_xlabel('Latency (ms)')
@@ -334,7 +337,7 @@ class TrainingPipeline:
         plt.tight_layout()
         plt.savefig(self.output_dir / 'training_curves.png', dpi=300, bbox_inches='tight')
         plt.close()
-    
+
     def cleanup(self):
         if hasattr(self, 'writer'):
             self.writer.close()
