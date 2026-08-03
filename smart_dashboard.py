@@ -23,7 +23,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 try:
-    from onnx_inference import ONNXInferenceEngine
+    from inference_engine import ONNXInferenceEngine
 except ImportError:
     st.error("Could not import ONNXInferenceEngine. Please ensure the engine file is available.")
     st.stop()
