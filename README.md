@@ -29,12 +29,30 @@ distillation student loses less than distilling an already-sparse one.
 - Power budget around 5 W
 - ONNX output, so the runtime is not tied to the training framework
 
-## On the numbers
+## What it actually achieves today
 
-The figures above are **design targets** that shaped the implementation — they are not
-measured results. This repository ships no benchmark harness and no trained weights, so
-nothing here reproduces them. They are recorded because they drove real decisions about
-architecture and algorithm choice, not as claims about observed performance.
+Running `model_compression.py` on the untrained student, measured on this machine:
+
+```
+original (fp32)      5.81 MB   1,521,956 parameters
+ONNX export          6.17 MB   (0.36 MB graph + 6.09 MB external weights)
+size reduction        -6.3%    i.e. slightly larger
+achieved sparsity     50.0%
+latency (CPU)        11.7 ms mean, 13.0 ms p95
+```
+
+**The pipeline does not hit the 8x target, and it is worth being precise about why.**
+
+Unstructured magnitude pruning sets weights to zero but leaves the tensor dense, so 50%
+sparsity costs exactly as many bytes as 0% sparsity. Dynamic quantisation only covers
+`Linear` layers, and MobileNetV3 is almost entirely convolutional — so the int8 conversion
+touches a small fraction of the weights. ONNX then adds a little container overhead on top,
+which is where the negative number comes from.
+
+Closing that gap needs two changes: **static** quantisation with a calibration pass, which
+does cover the convolutions and is worth close to 4x on their weights, and **structured**
+pruning that removes whole channels so the tensors genuinely shrink.
+`quantize_model_static()` implements the first; the second is not done here.
 
 ## Running it
 

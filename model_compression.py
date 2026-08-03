@@ -177,6 +177,27 @@ class ModelCompressor:
         onnx_model = onnx.load(filepath)
         onnx.checker.check_model(onnx_model)
 
+    @staticmethod
+    def _onnx_size_mb(onnx_path: str) -> float:
+        """Total on-disk size of an exported model, including external weights.
+
+        Recent torch exporters put initializers in a sibling `.onnx.data` file
+        once the model is past a size threshold. Measuring only the `.onnx`
+        graph then reports a fraction of the real footprint — here it was 0.36 MB
+        against 6.09 MB of weights sitting next to it.
+        """
+        total = os.path.getsize(onnx_path)
+        for suffix in (".data", "_data"):
+            sidecar = onnx_path + suffix
+            if os.path.exists(sidecar):
+                total += os.path.getsize(sidecar)
+        directory = os.path.dirname(onnx_path) or "."
+        stem = os.path.basename(onnx_path)
+        for name in os.listdir(directory):
+            if name.startswith(stem) and name != stem and not name.endswith((".data", "_data")):
+                total += os.path.getsize(os.path.join(directory, name))
+        return total / (1024 * 1024)
+
     def compress_pipeline(self, model: nn.Module, save_path: str = "models/",
                           sparsity: float = 0.5) -> Dict[str, Any]:
         """Prune, then quantise, then export — measuring the result at each step."""
@@ -192,7 +213,7 @@ class ModelCompressor:
 
         onnx_path = os.path.join(save_path, "compressed_mobilenet_v3.onnx")
         self.export_to_onnx(model, onnx_path)
-        onnx_size_mb = os.path.getsize(onnx_path) / (1024 * 1024)
+        onnx_size_mb = self._onnx_size_mb(onnx_path)
 
         self.compressed_model = quantized_model
         return {
