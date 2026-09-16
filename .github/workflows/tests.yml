@@ -22,7 +22,7 @@ jobs:
 
       # CPU torch. The tests build small local models, so no pretrained weights
       # are downloaded and torchvision is not needed.
-      - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - run: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
       - run: pip install numpy pytest
 
       - run: pytest -q
