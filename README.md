@@ -70,6 +70,31 @@ Outputs land in `models/` and are not committed: `compressed_mobilenet_v3.onnx` 
 Note that `torch.onnx.export` needs `onnxscript` on torch 2.6 and later — it is in
 `requirements.txt`, and the export step fails without it.
 
+## Tests
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install numpy pytest
+pytest -q
+```
+
+16 tests on small local models — no pretrained weights are downloaded. Two of
+them pin defects that left the code looking correct:
+
+- **Sparsity survives training.** Prune to 50%, take three optimiser steps,
+  measure 50% again. Removing the mask immediately let the next step refill the
+  zeros and the sparsity vanished silently.
+- **The channel plan changes nothing.** Convolution weights and `out_channels`
+  are identical before and after, so the metadata cannot report a width the
+  model does not compute at.
+
+The rest: magnitude pruning keeps the largest weights and drops the smallest, a
+student identical to its teacher has zero soft loss, `alpha=0` reduces exactly
+to cross-entropy, and dynamic quantisation converts Linear while leaving Conv2d
+alone — which is why it moves so little of a convolutional model.
+
+Run on Python 3.10 and 3.12 by [GitHub Actions](.github/workflows/tests.yml).
+
 ## Status
 
 Runs end to end: training, pruning, quantisation, ONNX export and benchmarking. No trained
