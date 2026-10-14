@@ -1,7 +1,7 @@
 # Edge AI Model Compression — Disaster Classification
 
-**Compressing MobileNetV3-Small for low-power edge inference, targeting 3nm-class AI
-accelerators, applied to disaster-scene classification.**
+**Compressing MobileNetV3-Small for low-power edge inference, targeting low-power
+edge AI accelerators, applied to disaster-scene classification.**
 
 A disaster-response camera runs on a battery in a place where the network may be gone.
 That constraint drives everything here: the model has to be small enough to fit, fast

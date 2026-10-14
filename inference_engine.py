@@ -14,7 +14,7 @@ import queue
 from concurrent.futures import ThreadPoolExecutor
 from collections import deque
 
-class TSMCAcceleratorSimulator:
+class EdgeAcceleratorSimulator:
     def __init__(self):
         self.specs = {
             'peak_tops': 50,
@@ -71,7 +71,7 @@ class ONNXInferenceEngine:
         self.inference_times = deque(maxlen=1000)
         self.batch_times = deque(maxlen=100)
         self.power_consumption = deque(maxlen=1000)
-        self.tsmc_simulator = TSMCAcceleratorSimulator()
+        self.accelerator_simulator = EdgeAcceleratorSimulator()
         self._setup_onnx_runtime(optimization_level)
         self._setup_preprocessing()
     
@@ -130,7 +130,7 @@ class ONNXInferenceEngine:
                       return_probabilities: bool = False) -> Dict:
         input_data = self.preprocess_image(image)
         model_complexity = np.prod(self.input_shape) * 50e6
-        tsmc_metrics = self.tsmc_simulator.simulate_inference(model_complexity)
+        simulated_metrics = self.accelerator_simulator.simulate_inference(model_complexity)
         start_time = time.perf_counter()
         outputs = self.session.run([self.output_name], {self.input_name: input_data})[0]
         end_time = time.perf_counter()
@@ -139,13 +139,13 @@ class ONNXInferenceEngine:
         predicted_class = np.argmax(probabilities)
         confidence = probabilities[predicted_class]
         self.inference_times.append(actual_latency)
-        self.power_consumption.append(tsmc_metrics['power_w'])
+        self.power_consumption.append(simulated_metrics['power_w'])
         result = {
             'class': self.classes[predicted_class],
             'class_index': predicted_class,
             'confidence': float(confidence),
             'actual_latency_ms': actual_latency,
-            'tsmc_metrics': tsmc_metrics,
+            'simulated_metrics': simulated_metrics,
         }
         if return_probabilities:
             result['probabilities'] = {
@@ -165,7 +165,7 @@ class ONNXInferenceEngine:
                 self.preprocess_image(img) for img in batch
             ], axis=0)
             model_complexity = np.prod(self.input_shape) * 50e6
-            tsmc_metrics = self.tsmc_simulator.simulate_inference(
+            simulated_metrics = self.accelerator_simulator.simulate_inference(
                 model_complexity, current_batch_size
             )
             start_time = time.perf_counter()
@@ -186,8 +186,8 @@ class ONNXInferenceEngine:
                     'confidence': float(confidence),
                     'batch_latency_ms': batch_latency,
                     'avg_latency_ms': avg_latency_per_image,
-                    'tsmc_metrics': {
-                        **tsmc_metrics,
+                    'simulated_metrics': {
+                        **simulated_metrics,
                         'latency_ms': avg_latency_per_image
                     }
                 })
@@ -262,14 +262,14 @@ class ONNXInferenceEngine:
                 width = bar.get_width()
                 ax2.text(width + 0.02, bar.get_y() + bar.get_height()/2, 
                         f'{prob:.1%}', ha='left', va='center', fontweight='bold')
-        tsmc_metrics = prediction_result.get('tsmc_metrics', {})
+        simulated_metrics = prediction_result.get('simulated_metrics', {})
         perf_data = {
             'Latency (ms)': prediction_result.get('actual_latency_ms', 0),
-            'TSMC Latency (ms)': tsmc_metrics.get('latency_ms', 0),
-            'Power (W)': tsmc_metrics.get('power_w', 0),
-            'Energy (mJ)': tsmc_metrics.get('energy_mj', 0),
-            'Throughput (FPS)': tsmc_metrics.get('throughput_fps', 0),
-            'Cache Hit Rate': tsmc_metrics.get('cache_hit_rate', 0)
+            'Simulated latency (ms)': simulated_metrics.get('latency_ms', 0),
+            'Power (W)': simulated_metrics.get('power_w', 0),
+            'Energy (mJ)': simulated_metrics.get('energy_mj', 0),
+            'Throughput (FPS)': simulated_metrics.get('throughput_fps', 0),
+            'Cache Hit Rate': simulated_metrics.get('cache_hit_rate', 0)
         }
         metrics = list(perf_data.keys())
         values = list(perf_data.values())
@@ -290,7 +290,7 @@ class ONNXInferenceEngine:
             f"Device: {self.device.upper()}",
             f"Input Shape: {self.input_shape}",
             f"Providers: {', '.join(self.session.get_providers())}",
-            f"Total Inferences: {self.tsmc_simulator.performance_counters['total_inferences']}",
+            f"Total Inferences: {self.accelerator_simulator.performance_counters['total_inferences']}",
             f"Avg Latency: {np.mean(list(self.inference_times)):.2f}ms" if self.inference_times else "Avg Latency: N/A",
             f"Avg Power: {np.mean(list(self.power_consumption)):.2f}W" if self.power_consumption else "Avg Power: N/A"
         ]
@@ -324,7 +324,7 @@ class ONNXInferenceEngine:
             for img in test_images[:10]:
                 result = self.predict_single(img)
                 run_times.append(result['actual_latency_ms'])
-                run_powers.append(result['tsmc_metrics']['power_w'])
+                run_powers.append(result['simulated_metrics']['power_w'])
             single_times.extend(run_times)
             single_powers.extend(run_powers)
         benchmark_results['single_inference'] = {
@@ -361,10 +361,10 @@ class ONNXInferenceEngine:
             }
         benchmark_results['batch_inference'] = batch_results
         benchmark_results['system_metrics'] = {
-            'tsmc_simulator': self.tsmc_simulator.performance_counters.copy(),
-            'cache_hit_rate': (self.tsmc_simulator.performance_counters['cache_hits'] / 
-                              max(1, self.tsmc_simulator.performance_counters['cache_hits'] + 
-                                  self.tsmc_simulator.performance_counters['cache_misses'])),
+            'accelerator_simulator': self.accelerator_simulator.performance_counters.copy(),
+            'cache_hit_rate': (self.accelerator_simulator.performance_counters['cache_hits'] / 
+                              max(1, self.accelerator_simulator.performance_counters['cache_hits'] + 
+                                  self.accelerator_simulator.performance_counters['cache_misses'])),
             'avg_power_efficiency': (benchmark_results['single_inference']['avg_throughput_fps'] / 
                                    benchmark_results['single_inference']['avg_power_w']),
             'model_info': {
@@ -398,8 +398,8 @@ class ONNXInferenceEngine:
         print(f"\nSystem Performance:")
         print(f"   Cache Hit Rate: {sys_metrics['cache_hit_rate']:.1%}")
         print(f"   Power Efficiency: {sys_metrics['avg_power_efficiency']:.1f} FPS/W")
-        print(f"   Total Inferences: {sys_metrics['tsmc_simulator']['total_inferences']}")
-        print(f"   Total Energy: {sys_metrics['tsmc_simulator']['power_consumed']:.2f} J")
+        print(f"   Total Inferences: {sys_metrics['accelerator_simulator']['total_inferences']}")
+        print(f"   Total Energy: {sys_metrics['accelerator_simulator']['power_consumed']:.2f} J")
         print(f"\nTotal Benchmark Duration: {results['total_duration_s']:.1f} seconds")
         print("="*80)
     
@@ -424,7 +424,7 @@ class ONNXInferenceEngine:
             'max_latency_ms': np.max(list(self.inference_times)),
             'p95_latency_ms': np.percentile(list(self.inference_times), 95),
             'avg_power_w': np.mean(list(self.power_consumption)) if self.power_consumption else 0,
-            'tsmc_metrics': self.tsmc_simulator.performance_counters.copy()
+            'simulated_metrics': self.accelerator_simulator.performance_counters.copy()
         }
     
     @staticmethod

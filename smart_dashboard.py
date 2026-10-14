@@ -410,10 +410,10 @@ class SmartDashboard:
                 'prediction': result['class'],
                 'confidence': result['confidence'],
                 'latency': result['actual_latency_ms'],
-                'tsmc_latency': result['tsmc_metrics']['latency_ms'],
-                'power': result['tsmc_metrics']['power_w'],
-                'energy': result['tsmc_metrics']['energy_mj'],
-                'throughput': result['tsmc_metrics']['throughput_fps']
+                'simulated_latency': result['simulated_metrics']['latency_ms'],
+                'power': result['simulated_metrics']['power_w'],
+                'energy': result['simulated_metrics']['energy_mj'],
+                'throughput': result['simulated_metrics']['throughput_fps']
             }
             st.session_state.inference_history.append(history_entry)
             return result
@@ -433,10 +433,10 @@ class SmartDashboard:
                     'prediction': result['class'],
                     'confidence': result['confidence'],
                     'latency': result.get('avg_latency_ms', 0),
-                    'tsmc_latency': result['tsmc_metrics']['latency_ms'],
-                    'power': result['tsmc_metrics']['power_w'],
-                    'energy': result['tsmc_metrics']['energy_mj'],
-                    'throughput': result['tsmc_metrics']['throughput_fps']
+                    'simulated_latency': result['simulated_metrics']['latency_ms'],
+                    'power': result['simulated_metrics']['power_w'],
+                    'energy': result['simulated_metrics']['energy_mj'],
+                    'throughput': result['simulated_metrics']['throughput_fps']
                 }
                 st.session_state.inference_history.append(history_entry)
             return {
@@ -458,13 +458,13 @@ class SmartDashboard:
         with col1:
             st.markdown("#### Performance")
             st.metric("Actual Latency", f"{result['actual_latency_ms']:.2f} ms")
-            st.metric("TSMC Latency", f"{result['tsmc_metrics']['latency_ms']:.2f} ms")
-            st.metric("Power Consumption", f"{result['tsmc_metrics']['power_w']:.2f} W")
+            st.metric("Simulated latency", f"{result['simulated_metrics']['latency_ms']:.2f} ms")
+            st.metric("Power Consumption", f"{result['simulated_metrics']['power_w']:.2f} W")
         with col2:
             st.markdown("#### Efficiency")
-            st.metric("Throughput", f"{result['tsmc_metrics']['throughput_fps']:.1f} FPS")
-            st.metric("Energy", f"{result['tsmc_metrics']['energy_mj']:.2f} mJ")
-            st.metric("Cache Hit Rate", f"{result['tsmc_metrics']['cache_hit_rate']:.1%}")
+            st.metric("Throughput", f"{result['simulated_metrics']['throughput_fps']:.1f} FPS")
+            st.metric("Energy", f"{result['simulated_metrics']['energy_mj']:.2f} mJ")
+            st.metric("Cache Hit Rate", f"{result['simulated_metrics']['cache_hit_rate']:.1%}")
         if 'probabilities' in result:
             st.markdown("#### Class Probabilities")
             prob_data = result['probabilities']
@@ -514,7 +514,7 @@ class SmartDashboard:
                     'Prediction': result['class'].title(),
                     'Confidence': f"{result['confidence']:.1%}",
                     'Latency (ms)': f"{result.get('avg_latency_ms', 0):.2f}",
-                    'Power (W)': f"{result['tsmc_metrics']['power_w']:.2f}"
+                    'Power (W)': f"{result['simulated_metrics']['power_w']:.2f}"
                 }
                 for i, result in enumerate(results)
             ])
@@ -620,11 +620,11 @@ class SmartDashboard:
                         elif metric == "Throughput":
                             benchmark_entry['throughput'] = len(images) / total_time
                         elif metric == "Power Consumption":
-                            benchmark_entry['power'] = np.mean([r['tsmc_metrics']['power_w'] for r in results])
+                            benchmark_entry['power'] = np.mean([r['simulated_metrics']['power_w'] for r in results])
                         elif metric == "Memory Usage":
                             benchmark_entry['memory_usage'] = np.random.uniform(100, 1000)
                         elif metric == "Cache Hit Rate":
-                            benchmark_entry['cache_hit_rate'] = np.mean([r['tsmc_metrics']['cache_hit_rate'] for r in results])
+                            benchmark_entry['cache_hit_rate'] = np.mean([r['simulated_metrics']['cache_hit_rate'] for r in results])
                     benchmark_results.append(benchmark_entry)
             return benchmark_results
         except Exception as e:

@@ -231,7 +231,7 @@ class ModelCompressor:
     def benchmark_local(self, model: nn.Module, input_shape: Tuple = (1, 3, 224, 224)) -> Dict[str, float]:
         """Measure inference latency on *this* machine.
 
-        This is not a 3nm accelerator and the numbers do not transfer to one.
+        This is not an edge accelerator and the numbers do not transfer to one.
         It is useful for comparing model variants against each other on identical
         hardware, which is what it is used for here.
         """

@@ -15,7 +15,11 @@ from datetime import datetime
 from model_compression import ModelCompressor, MobileNetV3Compressed, ResNet50Teacher
 from disaster_dataset import DatasetManager
 
-class TSMCPerformanceSimulator:
+class AcceleratorPerformanceEstimate:
+    """Analytical latency and power estimate for a generic low-power edge accelerator.
+
+    These are formula-based estimates from FLOPs and parameter counts, not measurements on any
+    real chip; use them to compare model variants, never as hardware numbers."""
     def __init__(self):
         self.base_latency = 2.5
         self.base_power = 0.8
@@ -86,7 +90,7 @@ class TrainingPipeline:
         self.output_dir.mkdir(exist_ok=True)
         self.compressor = ModelCompressor(self.device)
         self.dataset_manager = DatasetManager()
-        self.performance_simulator = TSMCPerformanceSimulator()
+        self.performance_simulator = AcceleratorPerformanceEstimate()
         self.training_history = {
             'train_loss': [],
             'val_loss': [],
@@ -258,17 +262,18 @@ class TrainingPipeline:
             self.student_model,
             save_path=str(self.output_dir / "models")
         )
-        final_performance = self.compressor.simulate_tsmc_3nm_performance(
+        final_performance = self.performance_simulator.estimate_performance(
             self.compressor.compressed_model
         )
         final_results = {
             'teacher_accuracy': teacher_results['best_accuracy'],
             'student_accuracy': student_results['best_accuracy'],
-            'compression_ratio': compression_results['compression_ratio'],
+            'size_reduction': compression_results['size_reduction'],
             'final_parameters': final_performance['parameters'],
             'latency_ms': final_performance['latency_ms'],
-            'power_w': final_performance['power_consumption_w'],
-            'targets_met': final_performance['target_latency_met'] and final_performance['target_power_met'],
+            'power_w': final_performance['power_w'],
+            'performance_source': 'analytical estimate, not measured on hardware',
+            'targets_met': final_performance['meets_targets'],
             'onnx_model_path': compression_results['onnx_path'],
             'training_history': self.training_history
         }
@@ -292,7 +297,7 @@ class TrainingPipeline:
 
     def plot_training_curves(self):
         fig, axes = plt.subplots(2, 3, figsize=(18, 12))
-        fig.suptitle('TSMC 3nm AI Accelerator Training Results', fontsize=16)
+        fig.suptitle('Training results (edge-accelerator figures are analytical estimates)', fontsize=16)
         epochs = range(1, len(self.training_history['train_loss']) + 1)
         axes[0, 0].plot(epochs, self.training_history['train_loss'], 'b-', label='Train')
         axes[0, 0].plot(epochs, self.training_history['val_loss'], 'r-', label='Validation')
@@ -315,7 +320,7 @@ class TrainingPipeline:
         axes[0, 2].grid(True)
         axes[1, 0].plot(epochs, self.training_history['latency_ms'], 'purple', linewidth=2)
         axes[1, 0].axhline(y=100, color='red', linestyle='--', label='Target (100ms)')
-        axes[1, 0].set_title('TSMC 3nm Latency')
+        axes[1, 0].set_title('Estimated accelerator latency')
         axes[1, 0].set_xlabel('Epoch')
         axes[1, 0].set_ylabel('Latency (ms)')
         axes[1, 0].legend()
